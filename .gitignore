@@ -1,0 +1,22 @@
+.build/
+build/
+.DS_Store
+.swiftpm/
+
+.dev-signing/
+.agents/
+
+# Local research records, diagnostics, screenshots, and test documents.
+docs/*
+!docs/user-guide.md
+
+# Local editor, Python, and credential files.
+__pycache__/
+*.py[cod]
+.env
+.env.*
+*.pem
+*.p12
+*.keychain-db
+.idea/
+.vscode/
