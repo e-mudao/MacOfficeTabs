@@ -1,10 +1,28 @@
+<p align="center"><img src="./Resources/IconDesign/MacOfficeTabs-icon-v1.png" width="104" alt="MacOfficeTabs 应用图标：带有蓝、绿、橙色标签的文档"></p>
+
 # MacOfficeTabs
 
-[English](README.md) · [简体中文](README.zh-CN.md)
+**为 macOS 上的 Word、Excel 和 PowerPoint 添加浮动文档标签栏。** 在保留 Office 原有窗口和保存提示的同时，切换文档、调整标签顺序。
 
-为 macOS 上的 Microsoft Word、Excel 和 PowerPoint 提供原生浮动标签栏。保留 Office 原有文档窗口，通过标签切换文档、调整顺序和请求关闭文档。
+[English](README.md) · [简体中文](README.zh-CN.md) · [快速开始](#快速开始) · [已知限制](#已知限制)
 
-**当前版本：0.2.9（构建 18），含应用图标的 Release 构建。** 本地应用尚未公证，完整产品验收仍未完成。以下步骤用于从源码构建本地签名应用，产物尚非经过公证的公开发行安装包。当前应用界面为简体中文。
+> [!IMPORTANT]
+> 完整产品验收仍未完成。以下步骤生成本地签名应用，不是公开发行安装包。当前应用界面为简体中文。
+
+<p align="center"><img src="./assets/readme/tab-bar-concept.svg" width="100%" alt="示意图：Word 窗口顶部居中的浮动标签栏，包含三个文档标签和关闭按钮"></p>
+
+*标签栏示意图，非应用实机截图。浮条出现在前台 Office 文档窗口内，不会把多个文档合并到同一个窗口。*
+
+## 快速开始
+
+需要 macOS 13 或以上版本、适用的 Xcode 或 Command Line Tools，以及 Word、Excel 或 PowerPoint 中至少一个应用。在仓库根目录执行：
+
+```sh
+bash scripts/build-app.sh
+open build/MacOfficeTabs.app
+```
+
+在“Office 窗口诊断”中点击“打开辅助功能设置”，授予 MacOfficeTabs 辅助功能控制权限。随后打开 Office 文档，将编辑窗口置于前台，点击标签切换。权限操作详见[首次启动](#首次启动)，签名选项详见[构建说明](#构建说明)。
 
 ## 功能
 
@@ -15,8 +33,6 @@
 - **可选快捷键。** 使用 `Control + Option + Command + ← / →`，按视觉顺序循环切换当前应用的标签。
 - **分应用设置与可选登录启动。** 快捷键和登录启动默认关闭，三个应用的标签栏默认开启。
 - **窗口诊断。** 查看权限、文档候选、焦点核验与浮条显示状态。
-
-工具是独立的 macOS 应用，不将 Office 文档嵌入一个统一主窗口。
 
 ## 环境要求与兼容性
 
@@ -31,15 +47,7 @@
 
 最低部署目标不代表全部版本兼容。Intel、其他 macOS / Office 版本、多物理屏和 Stage Manager 尚未验证。公开的兼容性摘要和剩余缺口见下方[已知限制](#已知限制)。
 
-## 构建与运行
-
-下载或克隆本仓库，在项目根目录执行：
-
-```sh
-swift test
-bash scripts/build-app.sh
-open build/MacOfficeTabs.app
-```
+## 构建说明
 
 构建脚本执行 release 编译，组装 `build/MacOfficeTabs.app`，签名并核验签名。未配置本地签名时使用 ad-hoc 签名。默认面向当前工具链架构构建，不是 Universal 通用应用构建。
 
@@ -121,7 +129,7 @@ docs/user-guide.md        中文详细使用说明
 
 ## 许可证
 
-本项目源码公开，采用 [Apache License 2.0，并附加 Commons Clause 1.0 条件](LICENSE)。两者同时适用，不是无限制的 Apache-2.0 许可，也不是 OSI 认可的开源许可。
+本项目源码公开，采用 [Apache License 2.0，并附加 Commons Clause 1.0 条件](LICENSE)。两者同时适用。
 
 在遵守完整许可的前提下，允许个人使用、企业内部使用、修改和免费再分发。Commons Clause 限制以收费或其他对价向第三方提供、其价值完全或主要来自本软件的产品或服务，包括改名或仅做外观修改后收费销售的版本。它不禁止所有商业集成或付费捆绑，具体以完整许可为准。再分发须保留必要声明（包括 Commons Clause），并按 Apache 2.0 要求标注修改文件。
 
