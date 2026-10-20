@@ -2,52 +2,60 @@
 
 # MacOfficeTabs
 
-**为 macOS 上的 Word、Excel 和 PowerPoint 添加浮动文档标签栏。** 在保留 Office 原有窗口和保存提示的同时，切换文档、调整标签顺序。
+**为 macOS 上的 Word、Excel 和 PowerPoint 添加浮动文档标签。** 切换文档、调整顺序；窗口和保存操作仍由 Office 处理。
 
-[English](README.md) · [简体中文](README.zh-CN.md) · [快速开始](#快速开始) · [已知限制](#已知限制)
+[下载](https://github.com/e-mudao/MacOfficeTabs/releases) · [English](README.md) · [功能说明](#标签栏如何工作) · [已知限制](#已知限制)
 
 > [!IMPORTANT]
-> 完整产品验收仍未完成。以下步骤生成本地签名应用，不是公开发行安装包。当前应用界面为简体中文。
+> **0.2.9（构建 18）是首个 GitHub Release。** Apple Silicon 版 DMG 使用 ad-hoc 签名，**未经 Apple 公证**；首次启动可能需要在系统设置中手动允许。兼容性验证仍在进行。
 
 <p align="center"><img src="./assets/readme/tab-bar-concept.svg" width="100%" alt="示意图：Word 窗口顶部居中的浮动标签栏，包含三个文档标签和关闭按钮"></p>
 
 *标签栏示意图，非应用实机截图。浮条出现在前台 Office 文档窗口内，不会把多个文档合并到同一个窗口。*
 
-## 快速开始
+## 下载与安装
 
-需要 macOS 13 或以上版本、适用的 Xcode 或 Command Line Tools，以及 Word、Excel 或 PowerPoint 中至少一个应用。在仓库根目录执行：
+从 [GitHub Releases](https://github.com/e-mudao/MacOfficeTabs/releases) 下载 `MacOfficeTabs-0.2.9-build18-arm64.dmg`。安装包面向 **Apple Silicon（arm64）**，最低部署目标为 macOS 13；目前只验证了下表所列环境。Word、Excel 或 PowerPoint 需另行安装。安装 DMG 不需要 Xcode 或命令行工具。
 
-```sh
-bash scripts/build-app.sh
-open build/MacOfficeTabs.app
-```
+1. 打开 DMG，将 **MacOfficeTabs.app** 拖到 **Applications（应用程序）**，再从“应用程序”启动。
+2. 若 macOS 阻止打开，请先尝试启动一次，再到**系统设置 → 隐私与安全性 → 仍要打开**确认。DMG 未经公证，因此需要手动放行；这不代表 Apple 已验证应用。
+3. 在初始的“Office 窗口诊断”中打开辅助功能设置，允许“应用程序”中的 MacOfficeTabs 控制电脑；返回应用点击“刷新”。
+4. 打开 Office 文档并将编辑窗口置于前台，点击标签标题切换文档。
 
-在“Office 窗口诊断”中点击“打开辅助功能设置”，授予 MacOfficeTabs 辅助功能控制权限。随后打开 Office 文档，将编辑窗口置于前台，点击标签切换。权限操作详见[首次启动](#首次启动)，签名选项详见[构建说明](#构建说明)。
+界面首次安装默认简体中文。如需英文，选择“MacOfficeTabs → 设置… → 语言 / Language → English”，切换立即生效，重启后保留。应用没有自动更新功能，后续版本需从 Releases 自行安装。
 
-## 功能
+若应用无法识别 Office 窗口，参阅[权限详情](#权限详情)。开发者可[从源码构建](#从源码构建)。
+
+## 标签栏如何工作
 
 - **当前 Office 应用的文档标签。** Word、Excel 和 PowerPoint 分别维护文档列表与设置；其他应用在前台时隐藏标签栏。
-- **统一位置。** 普通、铺满和原生全屏模式均使用窗口内部顶部居中的窄浮条，可能覆盖少量 Office 工具栏。
+- **窗口内的浮动栏。** 普通、铺满和原生全屏模式均显示在窗口内部顶部附近，可能覆盖少量 Office 工具栏。
 - **点击切换，拖动排序。** 标签过多时可横向滚动，运行期短 ID 帮助区分同名文档。
 - **原生关闭。** 标签 × 请求 Office 执行关闭，保存、放弃修改和取消均由 Office 原生提示处理。
-- **可选快捷键。** 使用 `Control + Option + Command + ← / →`，按视觉顺序循环切换当前应用的标签。
-- **分应用设置与可选登录启动。** 快捷键和登录启动默认关闭，三个应用的标签栏默认开启。
-- **窗口诊断。** 查看权限、文档候选、焦点核验与浮条显示状态。
+
+快捷键和登录启动为可选功能，默认关闭；三个应用的标签栏默认开启。设置还提供中英文界面选择；窗口诊断可查看权限、文档候选、焦点核验与浮条显示状态。
 
 ## 环境要求与兼容性
 
 | 项目 | 要求 / 已记录环境 |
 | --- | --- |
 | 最低部署目标 | macOS 13.0 及以上 |
-| 构建工具 | Swift 工具版本 5.9 及以上；配备适用 macOS SDK 的 Xcode 或 Command Line Tools |
+| Release 下载包 | Apple Silicon（arm64）DMG；暂不提供 Intel 版本 |
 | Office | 自行安装 Microsoft Word、Excel 或 PowerPoint |
 | 必要权限 | MacOfficeTabs 的辅助功能控制权限 |
-| 第三方包依赖 | 无 |
+| 构建工具（仅源码构建） | Swift 工具版本 5.9 及以上；配备适用 macOS SDK 的 Xcode 或 Command Line Tools |
 | 已记录实机环境 | Apple Silicon（arm64）、macOS 27.0.1（26A434）、Office 16.113.4 |
 
 最低部署目标不代表全部版本兼容。Intel、其他 macOS / Office 版本、多物理屏和 Stage Manager 尚未验证。公开的兼容性摘要和剩余缺口见下方[已知限制](#已知限制)。
 
-## 构建说明
+## 从源码构建
+
+在仓库根目录执行：
+
+```sh
+bash scripts/build-app.sh
+open build/MacOfficeTabs.app
+```
 
 构建脚本执行 release 编译，组装 `build/MacOfficeTabs.app`，签名并核验签名。未配置本地签名时使用 ad-hoc 签名。默认面向当前工具链架构构建，不是 Universal 通用应用构建。
 
@@ -61,14 +69,11 @@ open build/MacOfficeTabs.app
 
 脚本在 `.dev-signing/` 中创建项目专用证书和钥匙串，不修改系统根信任、登录钥匙串或默认钥匙串。该目录包含私钥和凭据，已被 Git 忽略；切勿上传或分享。本地开发签名不等于 Developer ID 发行签名或公证。
 
-## 首次启动
+## 权限详情
 
-1. 构建并打开应用，初始窗口为“Office 窗口诊断”。
-2. 点击“打开辅助功能设置”，进入允许应用控制电脑的权限页面。旧版 macOS 通常位于“隐私与安全性 → 辅助功能”；已测 macOS 27 页面名为“设备控制和数据访问”。
-3. 如有需要，点击“＋”添加刚构建的 `build/MacOfficeTabs.app` 并启用；返回工具点击“刷新”。
-4. 在 Office 中打开文档，将文档编辑窗口置于前台，点击标签标题切换文档。
+应用的初始窗口是“Office 窗口诊断”。点击其中的“打开辅助功能设置”可进入 macOS 的应用控制权限页面。旧版 macOS 通常位于“隐私与安全性 → 辅助功能”；已测 macOS 27 页面名为“设备控制和数据访问”。如果列表中没有 MacOfficeTabs，点击“＋”添加“应用程序”中的应用（源码构建则添加 `build/MacOfficeTabs.app`）并启用，再返回应用点击“刷新”。
 
-请先构建，再授权。更换签名身份或重新进行 ad-hoc 构建后，可能需要移除旧权限条目并添加当前应用。以工具实际诊断的权限状态为准，不能只看系统开关。
+请先把应用放在最终位置，再授权。替换或移动 ad-hoc 签名的应用后，可能需要移除旧权限条目并添加当前应用。以工具实际诊断的权限状态为准，不能只看系统开关。
 
 ## 日常操作
 
@@ -79,6 +84,7 @@ open build/MacOfficeTabs.app
 | 查看更多标签 | 在标签栏内部横向滚动 |
 | 关闭文档 | 点击已启用的 ×，再处理 Office 原生保存提示 |
 | 打开设置 | “MacOfficeTabs → 设置…”，或工具前台时按 `Command + ,` |
+| 切换界面语言 | 在设置的“语言 / Language”（英文界面显示为“Language / 语言”）中选择“简体中文”或“English”；立即生效，重启后保留 |
 | 快捷键切换 | 开启“启用 ⌃⌥⌘←/→ 切换当前应用标签”，再点击标签建立真实焦点关联 |
 | 诊断问题 | 从应用菜单打开“显示窗口诊断” |
 | 退出工具 | “MacOfficeTabs → 退出 MacOfficeTabs”，或工具前台时按 `Command + Q` |
@@ -102,7 +108,7 @@ open build/MacOfficeTabs.app
 - PowerPoint 放映窗口不属于文档编辑管理范围；Excel 同名工作簿的原有限制仍然适用。
 - 登录启动的注册与注销已在本机验证，实际注销账户后重新登录自动启动尚未验证。
 - 多屏、其他架构 / 版本、端到端窗口跟随延迟尚未验证，完整产品验收仍未完成。
-- 当前项目没有自动更新器或经过公证的发行安装包。
+- 0.2.9 DMG 仅支持 Apple Silicon，未使用 Developer ID 签名且未经公证；首次启动可能需要手动允许，尚未在其他 Mac 上验证安装与启动。当前没有自动更新功能。
 
 ## 开发与贡献
 

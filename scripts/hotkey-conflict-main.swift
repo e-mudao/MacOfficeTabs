@@ -22,8 +22,8 @@ func runProbe() -> Int32 {
     let controller = ShortcutController()
     defer { controller.unregister() }
     controller.update(eligible: true)
-    print("collision status: \(controller.status)")
-    guard controller.status.contains("注册失败或冲突") else {
+    print("collision state: \(controller.state)")
+    guard case .registrationFailed = controller.state else {
         print("FAIL: collision was not reported")
         return 1
     }
@@ -35,7 +35,7 @@ func runProbe() -> Int32 {
     UnregisterEventHotKey(left)
     UnregisterEventHotKey(occupied); right = nil
     controller.update(eligible: true)
-    guard controller.status.contains("注册失败或冲突") else {
+    guard case .registrationFailed = controller.state else {
         print("FAIL: failure was retried without explicit reset")
         return 1
     }
@@ -47,7 +47,7 @@ func runProbe() -> Int32 {
         UnregisterEventHotKey(ref)
     }
     controller.resetFailure(); controller.update(eligible: true)
-    guard controller.status.contains("已注册") else { print("FAIL: explicit reset did not recover"); return 1 }
+    guard controller.state == .registered else { print("FAIL: explicit reset did not recover"); return 1 }
     controller.update(eligible: false)
     for (key,id) in [(UInt32(kVK_LeftArrow),UInt32(104)), (UInt32(kVK_RightArrow),UInt32(105))] {
         let (status,ref) = register(key,id)
@@ -82,8 +82,8 @@ func runCrossProcessProbe() -> Int32 {
     let controller = ShortcutController()
     defer { controller.unregister() }
     controller.update(eligible: true)
-    print("cross-process status: \(controller.status)")
-    guard controller.status.contains("注册失败或冲突") else {
+    print("cross-process state: \(controller.state)")
+    guard case .registrationFailed = controller.state else {
         print("FAIL: external occupation was silently shared")
         return 1
     }
@@ -95,9 +95,9 @@ func runCrossProcessProbe() -> Int32 {
     release()
     guard child.terminationStatus == 0 else { print("FAIL: occupier release failed"); return 1 }
     controller.update(eligible: true)
-    guard controller.status.contains("注册失败或冲突") else { print("FAIL: external failure automatically retried"); return 1 }
+    guard case .registrationFailed = controller.state else { print("FAIL: external failure automatically retried"); return 1 }
     controller.resetFailure(); controller.update(eligible: true)
-    guard controller.status.contains("已注册") else { print("FAIL: recovery after external release failed"); return 1 }
+    guard controller.state == .registered else { print("FAIL: recovery after external release failed"); return 1 }
     controller.update(eligible: false)
     print("PASS: cross-process conflict, rollback, no retry, explicit recovery and cleanup")
     return 0

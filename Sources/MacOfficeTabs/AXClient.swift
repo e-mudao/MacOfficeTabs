@@ -27,7 +27,7 @@ enum ActivationResult {
     case failed(String)
     var message: String {
         switch self {
-        case .confirmed(let target, _, _): return "已确认目标窗口焦点 · \(target.uuidString.prefix(8))；真实键盘输入仍需人工验收。"
+        case .confirmed(let target, _, _): return T("activation.confirmed", String(target.uuidString.prefix(8)))
         case .failed(let message): return message
         }
     }
@@ -189,11 +189,11 @@ final class AXClient {
     func scan() -> ScanResult {
         guard AXIsProcessTrusted() else {
             clear()
-            return ScanResult(outcome: .denied, details: [], message: "未获得辅助功能权限；未访问或控制 Office。", processID: nil)
+            return ScanResult(outcome: .denied, details: [], message: T("scan.permissionDenied"), processID: nil)
         }
         guard let running = NSRunningApplication.runningApplications(withBundleIdentifier: profile.rawValue).first else {
             clear()
-            return ScanResult(outcome: .success([]), details: [], message: "\(profile.name) 未运行。请自行打开测试文档。", processID: nil)
+            return ScanResult(outcome: .success([]), details: [], message: T("scan.officeNotRunning", profile.name), processID: nil)
         }
         let pid = running.processIdentifier
         if activePID != pid { clear(); activePID = pid }
@@ -228,7 +228,7 @@ final class AXClient {
                 newElements[id] = window
                 let document = string(window, kAXDocumentAttribute).flatMap(URL.init(string:))
                 let record = WindowRecord(id: id, processID: pid,
-                                          title: string(window, kAXTitleAttribute) ?? "未知窗口",
+                                          title: string(window, kAXTitleAttribute) ?? T("scan.unknownWindow"),
                                           fileURL: document)
                 return WindowDetails(record: record, frame: geometry(window), minimized: bool(window, kAXMinimizedAttribute),
                                      focused: focus.map { CFEqual($0, window) } ?? false,
@@ -239,17 +239,17 @@ final class AXClient {
             guard !sources.isEmpty || windows.isEmpty else {
                 throw AXFailure(error:.failure,attribute:"documentMenuEmptyWithWindows")
             }
-            menuCandidates.reconcile(processID:pid,sources:sources.map { (AXToken(element:$0),string($0,kAXTitleAttribute) ?? "未知文档") })
+            menuCandidates.reconcile(processID:pid,sources:sources.map { (AXToken(element:$0),string($0,kAXTitleAttribute) ?? T("scan.unknownDocument")) })
             let targets = menuCandidates.entries.map { entry in
                 TabTarget(id:entry.id,title:entry.title,windowID:entry.windowID,menuCandidate:true,
                           focused:menuCandidates.isFocused(entry.id,focusedWindowID:details.first(where:{ $0.focused })?.record.id))
             }
             observe(pid: pid, app: app, windows: all)
             return ScanResult(outcome: .success(details.map(\.record)), details: details,
-                              message: "\(profile.name) · \(targets.count) 个标签（菜单 \(sources.count)） · \(details.count) 个标准窗口候选（核验 \(all.count)，全屏 \(details.filter { $0.fullScreen == true }.count)，安全焦点 \(safeForPanel)）；阻断原因：\(safetyReasons.isEmpty ? "无" : safetyReasons.joined(separator:";"))；未知文档身份不作文件合并。", processID: pid,tabs:targets)
+                              message: T("scan.summary", profile.name, targets.count, sources.count, details.count, all.count, details.filter { $0.fullScreen == true }.count, String(safeForPanel), safetyReasons.isEmpty ? T("scan.noBlocker") : safetyReasons.joined(separator:";")), processID: pid,tabs:targets)
         } catch {
             return ScanResult(outcome: .failure(String(describing: error)), details: [],
-                              message: "扫描失败，保留过期快照并禁止操作：\(error)", processID: pid)
+                              message: T("scan.failed", String(describing:error)), processID: pid)
         }
     }
 
@@ -301,47 +301,47 @@ final class AXClient {
     }
     func closeTab(_ id: UUID) -> String {
         guard let entry = menuCandidates.entries.first(where:{ $0.id == id }) else { return close(id) }
-        guard let expected = entry.windowID else { return "关闭未执行：请先点击此标签并核验窗口关联。" }
+        guard let expected = entry.windowID else { return T("close.verifyFirst") }
         switch activateMenuCandidate(id) {
         case .confirmed(_,let actual,_):
-            guard actual == expected else { return "关闭未执行：菜单对象已指向其他窗口，请重新确认。" }
+            guard actual == expected else { return T("close.targetChanged") }
             // The native candidate action already established this exact focus.
             // Do not mutate AXFocusedWindow/AXMain a second time before closing.
             return closeFocusedWindow(actual)
-        case .failed(let message): return "关闭未执行：\(message)"
+        case .failed(let message): return T("close.activationFailed", message)
         }
     }
     private func activateMenuCandidate(_ id: UUID) -> ActivationResult {
         guard AXIsProcessTrusted(),let pid = activePID,
               let running = NSRunningApplication(processIdentifier:pid),!running.isTerminated else {
-            return .failed("激活失败：权限或进程已失效。")
+            return .failed(T("activate.stalePermission"))
         }
         let before = scan()
         guard case .success = before.outcome,
               before.details.first(where:{ $0.focused })?.safeForPanel == true,
               let entry = menuCandidates.entries.first(where:{ $0.id == id }),
               bool(entry.token.element,kAXEnabledAttribute) == true else {
-            return .failed("激活失败：菜单候选失效或 Office 正在处理模态操作。")
+            return .failed(T("activate.menuUnavailable"))
         }
         let previousFocus = before.details.first(where:{ $0.focused })?.record.id
         let previouslyAssociated = entry.windowID
         var actions: CFArray?
         let actionRead = AXUIElementCopyActionNames(entry.token.element,&actions)
         guard actionRead == .success, (actions as? [String])?.contains(kAXPressAction) == true else {
-            return .failed("激活失败：菜单未暴露 AXPress [status=\(actionRead.rawValue);actions=\(actions as? [String] ?? [])]。")
+            return .failed(T("activate.menuNoPress", actionRead.rawValue, String(describing: actions as? [String] ?? [])))
         }
-        guard requestApplicationActivation(running) else { return .failed("激活失败：系统拒绝 \(profile.name) 应用激活，请用实际鼠标置前台后重试。") }
+        guard requestApplicationActivation(running) else { return .failed(T("activate.appRejected", profile.name)) }
         let press = AXUIElementPerformAction(entry.token.element,kAXPressAction as CFString)
-        guard press == .success else { return .failed("激活失败：原生菜单 AXPress 被拒绝 [\(press.rawValue)]。") }
+        guard press == .success else { return .failed(T("activate.pressRejected", press.rawValue)) }
         let app = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(app,0.25)
         let deadline = ProcessInfo.processInfo.systemUptime + 2
         while ProcessInfo.processInfo.systemUptime < deadline {
-            guard AXIsProcessTrusted(),!running.isTerminated else { return .failed("激活失败：权限或进程已失效。") }
+            guard AXIsProcessTrusted(),!running.isTerminated else { return .failed(T("activate.stalePermission")) }
             do {
                 let sources = try documentMenuItems(app)
-                menuCandidates.reconcile(processID:pid,sources:sources.map { (AXToken(element:$0),string($0,kAXTitleAttribute) ?? "未知文档") })
-                guard menuCandidates.entries.contains(where:{ $0.id == id }) else { return .failed("激活失败：菜单对象发生变化。") }
+                menuCandidates.reconcile(processID:pid,sources:sources.map { (AXToken(element:$0),string($0,kAXTitleAttribute) ?? T("scan.unknownDocument")) })
+                guard menuCandidates.entries.contains(where:{ $0.id == id }) else { return .failed(T("activate.menuChanged")) }
                 if selectedMenuIDs() == [id],NSWorkspace.shared.frontmostApplication?.processIdentifier == pid,
                    let focus = elementValue(app,kAXFocusedWindowAttribute),try requiredStandardWindow(focus) {
                     let actual = identities.identity(processID:pid,token:AXToken(element:focus))
@@ -352,77 +352,77 @@ final class AXClient {
                     guard CandidateAssociationPolicy.permits(previousFocus:previousFocus,actualFocus:actual,associated:previouslyAssociated,
                         soleCandidateBefore:before.tabs.map(\.id) == [id],soleCandidateAfter:after.tabs.map(\.id) == [id],
                         windowsBefore:before.details.map { $0.record.id },windowsAfter:after.details.map { $0.record.id }) else {
-                        return .failed("激活未确认：当前窗口尚未关联，多个候选不能由旧菜单标记证明身份；请先切换到其他标签再返回。")
+                        return .failed(T("activate.unconfirmedAssociation"))
                     }
                     guard case .success = after.outcome,
                           after.details.contains(where:{ $0.record.id == actual && $0.focused && $0.safeForPanel }),
                           selectedMenuIDs() == [id],
                           menuCandidates.associate(id,windowID:actual,selectedIDs:[id],frontmost:true,standardFocus:true) else {
-                        return .failed("激活失败：最终窗口焦点或模态核验失败。")
+                        return .failed(T("activate.finalFocusFailed"))
                     }
                     return .confirmed(id,actual,pid)
                 }
-            } catch { return .failed("激活失败：菜单核验 \(error)") }
+            } catch { return .failed(T("activate.menuCheckFailed", String(describing:error))) }
             usleep(50_000)
         }
-        return .failed("激活失败：2 秒内未确认原生勾选、\(profile.name) 前台与标准窗口焦点。")
+        return .failed(T("activate.menuTimeout", profile.name))
     }
 
     func close(_ id: UUID) -> String {
         switch activate(id) {
-        case .failed(let message): return "关闭未执行：\(message)"
+        case .failed(let message): return T("close.activationFailed", message)
         case .confirmed: break
         }
         return closeFocusedWindow(id)
     }
     private func closeFocusedWindow(_ id:UUID) -> String {
-        guard AXIsProcessTrusted(), let target = elements[id], let pid = activePID else { return "关闭未执行：目标已失效。" }
+        guard AXIsProcessTrusted(), let target = elements[id], let pid = activePID else { return T("close.staleTarget") }
         let app = AXUIElementCreateApplication(pid)
         guard let focus = elementValue(app,kAXFocusedWindowAttribute), CFEqual(focus,target),
               NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else {
-            return "关闭未执行：目标焦点无法确认。"
+            return T("close.focusUnknown")
         }
         guard bool(target,kAXModalAttribute) != true,
               let children = try? value(target,kAXChildrenAttribute) as? [AXUIElement],
               children.allSatisfy({ child in
                   guard let role = string(child,kAXRoleAttribute) else { return false }
                   return role != kAXSheetRole
-              }) else { return "关闭未执行：出现模态或无法核验子窗口。" }
+              }) else { return T("close.modalChildren") }
         do {
             // A modal window can appear elsewhere while activation was being verified.
             for candidate in try liveWindowList(app,pid:pid) {
                 if ControlSafety.blocksWindow(isStandard:try requiredStandardWindow(candidate),
                                               isModal:bool(candidate,kAXModalAttribute),
                                               isSheet:string(candidate,kAXRoleAttribute) == kAXSheetRole) {
-                    return "关闭未执行：出现模态或未知辅助窗口。"
+                    return T("close.unknownAuxiliary")
                 }
                 guard let children = try value(candidate,kAXChildrenAttribute) as? [AXUIElement] else {
-                    return "关闭未执行：无法核验子窗口。"
+                    return T("close.childrenUnknown")
                 }
                 for child in children {
                     guard let role = try value(child,kAXRoleAttribute) as? String, role != kAXSheetRole else {
-                        return "关闭未执行：出现保存提示或无法核验子窗口。"
+                        return T("close.savePrompt")
                     }
                 }
             }
-        } catch { return "关闭未执行：窗口核验失败 \(error)。" }
+        } catch { return T("close.windowCheckFailed", String(describing:error)) }
         do {
             let command = try nativeCloseCommand(app)
             let finalScan = scan()
             guard case .success = finalScan.outcome,
                   finalScan.details.contains(where:{ $0.record.id == id && $0.focused && $0.safeForPanel }) else {
-                return "关闭未执行：原生命令读取后出现模态或窗口状态无法确认。"
+                return T("close.commandStateUnknown")
             }
             // Native application commands act on current focus. Verify it again
             // after menu reads, immediately before the only destructive request.
             guard AXIsProcessTrusted(),let actual = elementValue(app,kAXFocusedWindowAttribute),
                   CFEqual(actual,target),NSWorkspace.shared.frontmostApplication?.processIdentifier == pid,
-                  bool(target,kAXModalAttribute) != true else { return "关闭未执行：最终焦点或模态状态发生变化。" }
+                  bool(target,kAXModalAttribute) != true else { return T("close.finalStateChanged") }
             AXUIElementSetMessagingTimeout(command,0.25)
             let status = AXUIElementPerformAction(command,kAXPressAction as CFString)
-            guard status == .success else { return "关闭请求被 Office 拒绝 [AXPress=\(status.rawValue)]。" }
+            guard status == .success else { return T("close.pressRejected", status.rawValue) }
             return verifyCloseEffect(app:app,target:target,pid:pid)
-        } catch { return "关闭未执行：无法核验原生关闭命令 \(error)。" }
+        } catch { return T("close.commandCheckFailed", String(describing:error)) }
     }
     /// Word's public performClose: menu command works independently of hidden
     /// full-screen titlebar controls. Never resolve the command by its label.
@@ -474,7 +474,7 @@ final class AXClient {
         let verifier = CloseVerifier(deadline:ProcessInfo.processInfo.systemUptime+2)
         while true {
             guard AXIsProcessTrusted(),let running = NSRunningApplication(processIdentifier:pid),!running.isTerminated else {
-                return "关闭请求结果未知：权限或进程发生变化；不会自动重试。"
+                return T("close.outcomeUnknown")
             }
             var invalid = false
             do { _ = try value(target,kAXRoleAttribute) }
@@ -496,19 +496,19 @@ final class AXClient {
                 if string(item,kAXRoleAttribute) == kAXSheetRole || bool(item,kAXModalAttribute) == true { prompt = true; break }
             }
             switch verifier.evaluate(targetInvalid:invalid,nativePrompt:prompt,now:ProcessInfo.processInfo.systemUptime) {
-            case .nativePrompt: return "已观察到 Office 原生提示；请本人选择，工具不会保存或回答提示。"
-            case .closed: return "已确认目标 AX 窗口失效；标签将在重新扫描后移除。"
-            case .unconfirmed: return "关闭请求尚未核实：2 秒内未观察到窗口关闭或原生提示；不会自动重试。"
+            case .nativePrompt: return T("close.nativePrompt")
+            case .closed: return T("close.confirmed")
+            case .unconfirmed: return T("close.unconfirmed")
             case .waiting: usleep(50_000)
             }
         }
     }
 
     func activate(_ id: UUID) -> ActivationResult {
-        guard AXIsProcessTrusted() else { clear(); return .failed("激活失败：辅助功能权限已撤销。") }
+        guard AXIsProcessTrusted() else { clear(); return .failed(T("activate.permissionRevoked")) }
         guard let pid = activePID, let target = elements[id],
               let running = NSRunningApplication(processIdentifier: pid), !running.isTerminated,
-              running.bundleIdentifier == profile.rawValue else { return .failed("激活失败：目标进程已失效。") }
+              running.bundleIdentifier == profile.rawValue else { return .failed(T("activate.processGone")) }
         let app = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(app, 0.25)
         do {
@@ -542,14 +542,14 @@ final class AXClient {
                                         childrenInspected: childrenInspected, blockingWindow: blockingWindow) else {
                 let reason = ControlSafety.rejection(hasTarget: hasTarget, focusedStandard: focusedStandard,
                                                      childrenInspected: childrenInspected, blockingWindow: blockingWindow) ?? "unknown"
-                return .failed("激活失败：前置检查 \(reason) [\(blockers.joined(separator: ","))]。请先完成 Office 原生操作。")
+                return .failed(T("activate.precheck", reason, blockers.joined(separator: ",")))
             }
-            guard let minimized = bool(target, kAXMinimizedAttribute) else { return .failed("激活失败：无法读取最小化状态。") }
+            guard let minimized = bool(target, kAXMinimizedAttribute) else { return .failed(T("activate.minimizedUnknown")) }
             if minimized && AXUIElementSetAttributeValue(target, kAXMinimizedAttribute as CFString, kCFBooleanFalse) != .success {
-                return .failed("激活失败：无法恢复目标最小化窗口。")
+                return .failed(T("activate.restoreFailed"))
             }
-            guard requestApplicationActivation(running) else { return .failed("激活失败：系统拒绝应用激活。") }
-            guard AXUIElementPerformAction(target, kAXRaiseAction as CFString) == .success else { return .failed("激活失败：AXRaise 被拒绝。") }
+            guard requestApplicationActivation(running) else { return .failed(T("activate.systemRejected")) }
+            guard AXUIElementPerformAction(target, kAXRaiseAction as CFString) == .success else { return .failed(T("activate.raiseRejected")) }
             // Some apps reject setting these attributes; observation, never return codes, decides success.
             _ = AXUIElementSetAttributeValue(app, kAXFocusedWindowAttribute as CFString, target)
             _ = AXUIElementSetAttributeValue(target, kAXMainAttribute as CFString, kCFBooleanTrue)
@@ -557,7 +557,7 @@ final class AXClient {
             let verifier = ActivationVerifier(target: id, processID: pid, deadline: deadline)
             var lastObservation = "notObserved"
             while ProcessInfo.processInfo.systemUptime < deadline {
-                guard AXIsProcessTrusted(), !running.isTerminated else { return .failed("激活失败：权限或进程已失效。") }
+                guard AXIsProcessTrusted(), !running.isTerminated else { return .failed(T("activate.stalePermission")) }
                 let actual = elementValue(app, kAXFocusedWindowAttribute)
                 let actualID = actual.flatMap { current in elements.first(where: { CFEqual($0.value, current) })?.key }
                 let frontmost = NSWorkspace.shared.frontmostApplication?.processIdentifier
@@ -571,8 +571,8 @@ final class AXClient {
                     usleep(50_000)
                 }
             }
-            return .failed("激活失败：1.5 秒内未确认目标的前台与焦点 [\(lastObservation)]。Office 保持实际状态。")
-        } catch { return .failed("激活失败：\(error)") }
+            return .failed(T("activate.focusTimeout", lastObservation))
+        } catch { return .failed(T("activate.error", String(describing:error))) }
     }
 
     /// AppKit activation must be coordinated on the main thread; AX I/O remains on its worker queue.
@@ -605,7 +605,7 @@ final class AXClient {
                 if notification as String == kAXUIElementDestroyedNotification { client.onDestroyedWindow?(element) }
                 client.onEvent?(notification as String)
             }, &created)
-            guard status == .success, let created else { onEvent?("AXObserver 不可用，使用周期核验"); return }
+            guard status == .success, let created else { onEvent?(T("observer.unavailable")); return }
             observer = created; observedApp = app
             let context = Unmanaged.passUnretained(self).toOpaque()
             for notification in appNotifications {

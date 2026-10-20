@@ -5,6 +5,7 @@ build/
 
 .dev-signing/
 .agents/
+beautify-github-readme/
 
 # Local research records, diagnostics, screenshots, and test documents.
 docs/*

@@ -18,6 +18,7 @@ final class Coordinator: NSObject, NSApplicationDelegate, NSTableViewDataSource,
     private var details: [WindowDetails] = []
     private var targets: [TabTarget] = []
     private var tableKey = ""
+    private var languageRevision = 0
     private var scanning = false
     private var controlling = false
     private var timer: Timer?
@@ -25,11 +26,16 @@ final class Coordinator: NSObject, NSApplicationDelegate, NSTableViewDataSource,
     private var events: [String] = []
     private var window: NSWindow!
     private let table = NSTableView()
-    private let status = NSTextField(wrappingLabelWithString: "正在检查权限…")
-    private let actionStatus = NSTextField(wrappingLabelWithString: "请选择测试窗口，再执行激活；工具不会关闭或保存文档。")
-    private let eventStatus = NSTextField(wrappingLabelWithString: "尚无事件")
-    private let activateButton = NSButton(title: "激活并核验选中窗口", target: nil, action: nil)
-    private let refreshButton = NSButton(title: "刷新", target: nil, action: nil)
+    private let status = NSTextField(wrappingLabelWithString: "")
+    private let actionStatus = NSTextField(wrappingLabelWithString: "")
+    private let eventStatus = NSTextField(wrappingLabelWithString: "")
+    private let activateButton = NSButton(title: "", target: nil, action: nil)
+    private let refreshButton = NSButton(title: "", target: nil, action: nil)
+    private let heading = NSTextField(labelWithString: "")
+    private let subtitle = NSTextField(wrappingLabelWithString: "")
+    private let permissionButton = NSButton(title: "", target: nil, action: nil)
+    private let copyButton = NSButton(title: "", target: nil, action: nil)
+    private let privacy = NSTextField(wrappingLabelWithString: "")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildMenu(); buildWindow()
@@ -37,6 +43,13 @@ final class Coordinator: NSObject, NSApplicationDelegate, NSTableViewDataSource,
             guard let self else { return }
             self.tabs.enabled = self.preferences.tabsEnabled(for:self.route.app)
             self.shortcuts.resetFailure(); self.tabs.hide(); self.refresh()
+        }
+        settings.languageChanged = { [weak self] in
+            guard let self else { return }
+            self.languageRevision += 1
+            self.events.removeAll(); self.tableKey = ""
+            self.buildMenu(); self.localizeWindow(); self.settings.setShortcutStatus(self.shortcuts.status)
+            self.table.reloadData(); self.refresh()
         }
         shortcuts.invoke = { [weak self] forward in self?.cycleTab(forward:forward) }
 
@@ -87,52 +100,46 @@ final class Coordinator: NSObject, NSApplicationDelegate, NSTableViewDataSource,
     private func buildMenu() {
         let main = NSMenu(); let appItem = NSMenuItem(); main.addItem(appItem)
         let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "关于 MacOfficeTabs", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        appMenu.addItem(withTitle: T("menu.about"), action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "显示窗口诊断", action:#selector(showDiagnostics),keyEquivalent:"")
-        appMenu.addItem(withTitle:"设置…",action:#selector(showSettings),keyEquivalent:",")
-        appMenu.addItem(withTitle: "退出 MacOfficeTabs", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: T("menu.diagnostics"), action:#selector(showDiagnostics),keyEquivalent:"")
+        appMenu.addItem(withTitle:T("menu.settings"),action:#selector(showSettings),keyEquivalent:",")
+        appMenu.addItem(withTitle: T("menu.quit"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
         let editItem = NSMenuItem(); main.addItem(editItem)
-        let edit = NSMenu(title: "编辑")
-        edit.addItem(withTitle: "复制", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
-        edit.addItem(withTitle: "全选", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        let edit = NSMenu(title: T("menu.edit"))
+        edit.addItem(withTitle: T("menu.copy"), action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        edit.addItem(withTitle: T("menu.selectAll"), action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         editItem.submenu = edit; NSApp.mainMenu = main
     }
     private func buildWindow() {
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 580),
                           styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-        window.title = "MacOfficeTabs · Office 窗口诊断"
         window.minSize = NSSize(width: 720, height: 460)
         window.isReleasedWhenClosed = false
-        let version = Bundle.main.object(forInfoDictionaryKey:"CFBundleShortVersionString") as? String ?? "development"
-        let build = Bundle.main.object(forInfoDictionaryKey:"CFBundleVersion") as? String ?? "unknown"
-        let title = NSTextField(labelWithString: "Office 窗口与标签管理 · \(version) (\(build))")
-        title.font = .systemFont(ofSize: 24, weight: .semibold)
-        let subtitle = NSTextField(wrappingLabelWithString: "Office 前台时显示辅助标签栏 · 窗口保持原有布局 · 关闭交给 Office 原生确认")
+        heading.font = .systemFont(ofSize: 24, weight: .semibold)
         subtitle.textColor = .secondaryLabelColor
         status.font = .systemFont(ofSize: 14, weight: .medium)
         status.setAccessibilityIdentifier("permissionStatus")
         actionStatus.setAccessibilityIdentifier("activationStatus")
         eventStatus.font = .monospacedSystemFont(ofSize: 11, weight: .regular)
         eventStatus.textColor = .secondaryLabelColor
-        for (identifier, title, width) in [("title", "窗口标题", 260.0), ("id", "运行时 ID", 100.0),
-                                           ("focus", "AX 焦点", 75.0), ("min", "最小化", 75.0), ("geometry", "几何 / 文档关联", 260.0)] {
+        for (identifier, title, width) in [("title", "diagnostics.columnTitle", 260.0), ("id", "diagnostics.columnID", 100.0),
+                                           ("focus", "diagnostics.columnFocus", 75.0), ("min", "diagnostics.columnMinimized", 75.0), ("geometry", "diagnostics.columnAssociation", 260.0)] {
             let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(identifier))
-            column.title = title; column.width = width; table.addTableColumn(column)
+            column.title = T(title); column.width = width; table.addTableColumn(column)
         }
         table.dataSource = self; table.delegate = self; table.rowHeight = 34
         table.usesAlternatingRowBackgroundColors = true
-        table.allowsMultipleSelection = false; table.setAccessibilityLabel("Office 标准窗口候选列表")
+        table.allowsMultipleSelection = false
         let scroll = NSScrollView(); scroll.documentView = table; scroll.hasVerticalScroller = true; scroll.hasHorizontalScroller = true
         refreshButton.target = self; refreshButton.action = #selector(refreshClicked)
         activateButton.target = self; activateButton.action = #selector(activateClicked); activateButton.isEnabled = false
-        let permission = NSButton(title: "打开辅助功能设置", target: self, action: #selector(openPermissions))
-        let copy = NSButton(title: "复制诊断（含标题）", target: self, action: #selector(copyDiagnostics))
-        let buttons = NSStackView(views: [refreshButton, activateButton, permission, copy]); buttons.spacing = 10
-        let privacy = NSTextField(wrappingLabelWithString: "辅助功能仅用于读取窗口与切换焦点。无自动化权限申请，无正文读取。退出工具不退出 Office。")
+        permissionButton.target = self; permissionButton.action = #selector(openPermissions)
+        copyButton.target = self; copyButton.action = #selector(copyDiagnostics)
+        let buttons = NSStackView(views: [refreshButton, activateButton, permissionButton, copyButton]); buttons.spacing = 10
         privacy.textColor = .secondaryLabelColor; privacy.font = .systemFont(ofSize: 12)
-        let stack = NSStackView(views: [title, subtitle, status, scroll, buttons, actionStatus, eventStatus, privacy])
+        let stack = NSStackView(views: [heading, subtitle, status, scroll, buttons, actionStatus, eventStatus, privacy])
         stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 14
         stack.translatesAutoresizingMaskIntoConstraints = false
         window.contentView!.addSubview(stack)
@@ -148,7 +155,25 @@ final class Coordinator: NSObject, NSApplicationDelegate, NSTableViewDataSource,
             eventStatus.widthAnchor.constraint(equalTo: stack.widthAnchor),
             privacy.widthAnchor.constraint(equalTo: stack.widthAnchor)
         ])
-        window.center(); window.makeKeyAndOrderFront(nil)
+        localizeWindow(); window.center(); window.makeKeyAndOrderFront(nil)
+    }
+    private func localizeWindow() {
+        let version = Bundle.main.object(forInfoDictionaryKey:"CFBundleShortVersionString") as? String ?? "development"
+        let build = Bundle.main.object(forInfoDictionaryKey:"CFBundleVersion") as? String ?? "unknown"
+        window.title = T("diagnostics.windowTitle", route.app.name)
+        heading.stringValue = T("diagnostics.heading", version, build)
+        subtitle.stringValue = T("diagnostics.subtitle")
+        status.stringValue = T("diagnostics.checking")
+        actionStatus.stringValue = T("diagnostics.initialAction")
+        eventStatus.stringValue = T("diagnostics.noEvents")
+        activateButton.title = T("diagnostics.activate")
+        refreshButton.title = T("diagnostics.refresh")
+        permissionButton.title = T("diagnostics.permissions")
+        copyButton.title = T("diagnostics.copy")
+        privacy.stringValue = T("diagnostics.privacy")
+        table.setAccessibilityLabel(T("diagnostics.tableLabel"))
+        let keys = ["title":"diagnostics.columnTitle", "id":"diagnostics.columnID", "focus":"diagnostics.columnFocus", "min":"diagnostics.columnMinimized", "geometry":"diagnostics.columnAssociation"]
+        for column in table.tableColumns { if let key = keys[column.identifier.rawValue] { column.title = T(key) } }
     }
     private func selectFrontmostApp() {
         guard let profile = OfficeApp(bundleID:NSWorkspace.shared.frontmostApplication?.bundleIdentifier), profile != route.app else { return }
@@ -156,13 +181,14 @@ final class Coordinator: NSObject, NSApplicationDelegate, NSTableViewDataSource,
         tabs.enabled = preferences.tabsEnabled(for:profile)
         state = WindowState(); details = []; targets = []; tableKey = ""
         table.reloadData(); tabs.hide(); updateControls()
-        window.title = "MacOfficeTabs · \(profile.name) 窗口诊断"
+        window.title = T("diagnostics.windowTitle", profile.name)
     }
     @objc private func refreshClicked() { refresh() }
     private func refresh() {
         guard !scanning, !controlling else { return }
         selectFrontmostApp()
         let ticket = route.ticket
+        let languageRevision = self.languageRevision
         let client = self.client
         shortcuts.update(eligible:false)
         scanning = true; refreshButton.isEnabled = false; activateButton.isEnabled = false
@@ -172,7 +198,7 @@ final class Coordinator: NSObject, NSApplicationDelegate, NSTableViewDataSource,
             let result = client.scan()
             DispatchQueue.main.async {
                 self.scanning = false; self.refreshButton.isEnabled = true
-                guard self.route.accepts(ticket) else { self.refresh(); return }
+                guard self.route.accepts(ticket), self.languageRevision == languageRevision else { self.refresh(); return }
                 self.state.apply(result.outcome)
                 switch result.outcome {
                 case .success: self.details = result.details; self.targets = result.tabs
@@ -191,7 +217,7 @@ final class Coordinator: NSObject, NSApplicationDelegate, NSTableViewDataSource,
                 self.tabs.enabled = self.preferences.tabsEnabled(for:ticket.app)
                 self.updateShortcuts()
                 self.tabs.update(self.details,canControl:self.state.canControl && !self.controlling,targets:self.targets,profile:ticket.app)
-                self.eventStatus.stringValue = "最近事件：\(self.events.last ?? "无") · \(self.tabs.diagnostic)"
+                self.eventStatus.stringValue = T("diagnostics.recent", self.events.last ?? T("diagnostics.none"), self.tabs.diagnostic)
             }
         }
     }
@@ -212,19 +238,20 @@ final class Coordinator: NSObject, NSApplicationDelegate, NSTableViewDataSource,
     private func control(_ id: UUID, closing:Bool) {
         guard state.canControl, !controlling, (details.contains(where: { $0.record.id == id }) || targets.contains(where: { $0.id == id })) else { return }
         let ticket = route.ticket
+        let languageRevision = self.languageRevision
         let client = self.client
         shortcuts.update(eligible:false)
         controlling = true; updateControls(); refreshButton.isEnabled = false
         tabs.hide()
-        actionStatus.stringValue = "正在验证目标窗口…（有限等待）"
+        actionStatus.stringValue = T("diagnostics.verifying")
         queue.async { [weak self] in
             guard let self else { return }
             let message = closing ? client.closeTab(id) : client.activateTab(id).message
             DispatchQueue.main.async {
                 self.controlling = false
-                guard self.route.accepts(ticket) else { self.refresh(); return }
+                guard self.route.accepts(ticket), self.languageRevision == languageRevision else { self.refresh(); return }
                 self.actionStatus.stringValue = message
-                self.recordEvent(closing ? "关闭结果：" + message : "激活结果：" + message); self.refresh()
+                self.recordEvent(T(closing ? "diagnostics.closeResult" : "diagnostics.activateResult", message)); self.refresh()
             }
         }
     }
@@ -255,12 +282,12 @@ final class Coordinator: NSObject, NSApplicationDelegate, NSTableViewDataSource,
             "\($0.record.id) pid=\($0.record.processID) title=\($0.record.title) focused=\($0.focused) fullscreen=\(String(describing:$0.fullScreen)) safePanel=\($0.safeForPanel)"
         } + events).joined(separator: "\n")
         NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string)
-        actionStatus.stringValue = "诊断已复制，包含窗口标题。分享前请检查敏感信息。"
+        actionStatus.stringValue = T("diagnostics.copied")
     }
     private func recordEvent(_ event: String) {
         events.append("\(Date().formatted(date: .omitted, time: .standard)) \(event)")
         if events.count > 30 { events.removeFirst(events.count - 30) }
-        eventStatus.stringValue = "最近事件：\(events.last ?? "无") · 已确认文件关联 \(registry.documents.count)"
+        eventStatus.stringValue = T("diagnostics.recent", events.last ?? T("diagnostics.none"), T("diagnostics.associations", registry.documents.count))
     }
     func numberOfRows(in tableView: NSTableView) -> Int { targets.count }
     func tableViewSelectionDidChange(_ notification: Notification) { updateControls() }
@@ -272,10 +299,10 @@ final class Coordinator: NSObject, NSApplicationDelegate, NSTableViewDataSource,
         switch tableColumn?.identifier.rawValue {
         case "title": text = target.title
         case "id": text = String(target.id.uuidString.prefix(8))
-        case "focus": text = target.focused ? "是" : "否"
-        case "min": text = detail?.minimized.map { $0 ? "是" : "否" } ?? "未知"
+        case "focus": text = T(target.focused ? "diagnostics.yes" : "diagnostics.no")
+        case "min": text = detail?.minimized.map { T($0 ? "diagnostics.yes" : "diagnostics.no") } ?? T("diagnostics.unknown")
         default:
-            text = target.menuCandidate ? (target.canClose ? "菜单对象 · 已核验 AX 关联" : "菜单对象 · 首次关联前禁止关闭") : "AX 窗口 · URL 可用性以实际读取为准"
+            text = target.menuCandidate ? T(target.canClose ? "diagnostics.menuVerified" : "diagnostics.menuUnverified") : T("diagnostics.axWindow")
         }
         let cell = NSTextField(labelWithString: text); cell.lineBreakMode = .byTruncatingTail; cell.toolTip = text
         return cell

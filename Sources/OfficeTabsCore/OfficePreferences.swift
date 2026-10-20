@@ -1,8 +1,17 @@
 import Foundation
 
+public enum AppLanguage: String, CaseIterable {
+    case simplifiedChinese = "zh-Hans"
+    case english = "en"
+}
+
 public final class OfficePreferences {
     private let defaults: UserDefaults
     public init(defaults:UserDefaults = .standard) { self.defaults = defaults }
+    public var language: AppLanguage {
+        get { AppLanguage(rawValue: defaults.string(forKey: "interfaceLanguage") ?? "") ?? .simplifiedChinese }
+        set { defaults.set(newValue.rawValue, forKey: "interfaceLanguage") }
+    }
     public var shortcutsEnabled: Bool {
         get { defaults.bool(forKey:"shortcutsEnabled") }
         set { defaults.set(newValue,forKey:"shortcutsEnabled") }

@@ -50,7 +50,7 @@ final class TabPanelController {
 
     init() {
         panel = PassivePanel(contentRect:.zero,styleMask:[.borderless,.nonactivatingPanel],backing:.buffered,defer:false)
-        panel.title = "MacOfficeTabs · Word 标签"
+        panel.title = T("panel.title", "Word")
         panel.level = .floating; panel.hidesOnDeactivate = false; panel.isFloatingPanel = true
         panel.collectionBehavior = [.canJoinAllSpaces,.canJoinAllApplications,.fullScreenAuxiliary,.ignoresCycle]
         panel.isReleasedWhenClosed = false; panel.isOpaque = false; panel.backgroundColor = .clear
@@ -77,7 +77,7 @@ final class TabPanelController {
     func hide(reason:String = "explicitHide") { visibilityReason = reason; panel.orderOut(nil) }
     func update(_ details: [WindowDetails], canControl: Bool, targets: [TabTarget], profile: OfficeApp = .word) {
         self.profile = profile
-        panel.title = "MacOfficeTabs · \(profile.name) 标签"
+        panel.title = T("panel.title", profile.name)
         guard enabled else { hide(reason:"disabled"); return }
         guard canControl else { hide(reason:"scanOrActionUnsafe"); return }
         guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == profile.rawValue else { hide(reason:"officeNotFrontmost"); return }
@@ -97,7 +97,7 @@ final class TabPanelController {
         let ids = order.ordered(targets.map { $0.id })
         orders[profile] = order
         let byID = Dictionary(uniqueKeysWithValues:targets.map { ($0.id,$0) })
-        let key = ids.compactMap { byID[$0] }.map { "\($0.id):\($0.title):\($0.focused):\($0.canClose)" }.joined(separator:"|")
+        let key = OfficePreferences().language.rawValue + "|" + ids.compactMap { byID[$0] }.map { "\($0.id):\($0.title):\($0.focused):\($0.canClose)" }.joined(separator:"|")
         if key != renderKey {
             rendered = ids; renderKey = key
             for view in stack.arrangedSubviews { stack.removeArrangedSubview(view); view.removeFromSuperview() }
@@ -108,8 +108,8 @@ final class TabPanelController {
                 let title = detail.title
                 let button = TabButton(frame:.zero)
                 button.title = title + " · " + short
-                button.toolTip = title + "\n" + short + (detail.canClose ? " · 拖动调整顺序" : " · 请先点击此标签核验窗口身份，成功后启用 ×")
-                button.setAccessibilityLabel("切换到 \(title) · \(short)")
+                button.toolTip = title + "\n" + short + (detail.canClose ? T("panel.drag") : T("panel.verifyFirst"))
+                button.setAccessibilityLabel(T("panel.switchLabel", title, short))
                 button.bezelStyle = .rounded; button.font = .systemFont(ofSize:11,weight:detail.focused ? .semibold : .regular)
                 button.contentTintColor = detail.focused ? .systemBlue : .labelColor
                 button.lineBreakMode = .byTruncatingMiddle
@@ -118,8 +118,8 @@ final class TabPanelController {
                 let closeButton = NSButton(title:"×",target:nil,action:nil)
                 closeButton.isEnabled = detail.canClose
                 closeButton.bezelStyle = .inline; closeButton.font = .systemFont(ofSize:16)
-                closeButton.setAccessibilityLabel("关闭 \(title) · \(short)")
-                closeButton.toolTip = detail.canClose ? "交给 Office 原生关闭；保留保存提示" : "请先点击标签标题核验窗口身份，再使用 ×"
+                closeButton.setAccessibilityLabel(T("panel.closeLabel", title, short))
+                closeButton.toolTip = detail.canClose ? T("panel.nativeClose") : T("panel.verifyClose")
                 let handler = CloseHandler { [weak self] in self?.close?(id) }
                 closeButton.target = handler; closeButton.action = #selector(CloseHandler.invoke)
                 // NSControl targets are weak. Keep the handler with its containing view.
